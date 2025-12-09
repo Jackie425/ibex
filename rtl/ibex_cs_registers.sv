@@ -1306,22 +1306,11 @@ module ibex_cs_registers import ibex_pkg::*; #(
   end
 
   // event selector (hardwired, 0 means no event)
-  always_comb begin : gen_mhpmevent
-
-    // activate all
-    for (int i = 0; i < 32; i++) begin : gen_mhpmevent_active
-      mhpmevent[i] = '0;
-
-      if (i >= 3) begin
-        mhpmevent[i][i - 3] = 1'b1;
-      end
-    end
-
-    // deactivate
-    mhpmevent[1] = '0; // not existing, reserved
-    for (int unsigned i = 3 + MHPMCounterNum; i < 32; i++) begin : gen_mhpmevent_inactive
-      mhpmevent[i] = '0;
-    end
+  // event selector (hardwired, 0 means no event). Flattened to avoid
+  // runtime loops; each entry gets a constant one-hot if enabled.
+  for (genvar i = 0; i < 32; i++) begin : gen_mhpmevent
+    localparam bit HasEvent = (i >= 3) && (i < (3 + MHPMCounterNum));
+    assign mhpmevent[i] = HasEvent ? (32'h1 << (i - 3)) : 32'h0;
   end
 
   // mcycle

@@ -233,25 +233,20 @@ module ibex_fetch_fifo #(
     end
   end
 
-  for (genvar i = 0; i < DEPTH; i++) begin : g_fifo_regs
-    if (ResetAll) begin : g_rdata_ra
-      always_ff @(posedge clk_i or negedge rst_ni) begin
-        if (!rst_ni) begin
-          rdata_q[i] <= '0;
-          err_q[i]   <= '0;
-        end else if (entry_en[i]) begin
-          rdata_q[i] <= rdata_d[i];
-          err_q[i]   <= err_d[i];
-        end
+  // Single array update to avoid multiple drivers across generates.
+  always_ff @(posedge clk_i) begin : g_rdata_nr
+      if (entry_en[0]) begin
+        rdata_q[0] <= rdata_d[0];
+        err_q[0]   <= err_d[0];
       end
-    end else begin : g_rdata_nr
-      always_ff @(posedge clk_i) begin
-        if (entry_en[i]) begin
-          rdata_q[i] <= rdata_d[i];
-          err_q[i]   <= err_d[i];
-        end
+      if (entry_en[1]) begin
+        rdata_q[1] <= rdata_d[1];
+        err_q[1]   <= err_d[1];
       end
-    end
+      if (entry_en[2]) begin
+        rdata_q[2] <= rdata_d[2];
+        err_q[2]   <= err_d[2];
+      end
   end
 
   ////////////////
