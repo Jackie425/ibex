@@ -233,11 +233,35 @@ module ibex_cs_registers import ibex_pkg::*; #(
   irqs_t       mip;
   dcsr_t       dcsr_q, dcsr_d;
   logic        dcsr_en;
+  logic [31:0] dcsr_bits_d, dcsr_bits_q;
   logic [31:0] depc_q, depc_d;
   logic        depc_en;
   logic [31:0] dscratch0_q;
   logic [31:0] dscratch1_q;
   logic        dscratch0_en, dscratch1_en;
+
+  // DCSR bit positions (packed struct from MSB to LSB)
+  localparam int unsigned DCSR_XDEBUGVER_MSB = 31;
+  localparam int unsigned DCSR_XDEBUGVER_LSB = 28;
+  localparam int unsigned DCSR_ZERO2_MSB     = 27;
+  localparam int unsigned DCSR_ZERO2_LSB     = 16;
+  localparam int unsigned DCSR_EBREAKM_BIT   = 15;
+  localparam int unsigned DCSR_ZERO1_BIT     = 14;
+  localparam int unsigned DCSR_EBREAKS_BIT   = 13;
+  localparam int unsigned DCSR_EBREAKU_BIT   = 12;
+  localparam int unsigned DCSR_STEP_IE_BIT   = 11;
+  localparam int unsigned DCSR_STOPCOUNT_BIT = 10;
+  localparam int unsigned DCSR_STOPTIME_BIT  = 9;
+  localparam int unsigned DCSR_CAUSE_MSB     = 8;
+  localparam int unsigned DCSR_CAUSE_LSB     = 6;
+  localparam int unsigned DCSR_ZERO0_BIT     = 5;
+  localparam int unsigned DCSR_MPRVEN_BIT    = 4;
+  localparam int unsigned DCSR_NMIP_BIT      = 3;
+  localparam int unsigned DCSR_STEP_BIT      = 2;
+  localparam int unsigned DCSR_PRV_MSB       = 1;
+  localparam int unsigned DCSR_PRV_LSB       = 0;
+
+  assign dcsr_bits_q = dcsr_q;
 
   // CSRs for recoverable NMIs
   // NOTE: these CSRS are nonstandard, see https://github.com/riscv/riscv-isa-manual/issues/261
@@ -585,7 +609,7 @@ module ibex_cs_registers import ibex_pkg::*; #(
     mtvec_d      = csr_mtvec_init_i ? {boot_addr_i[31:8], 6'b0, 2'b01} :
                                       {csr_wdata_int[31:8], 6'b0, 2'b01};
     dcsr_en      = 1'b0;
-    dcsr_d       = dcsr_q;
+    dcsr_bits_d  = dcsr_bits_q;
     depc_d       = {csr_wdata_int[31:1], 1'b0};
     depc_en      = 1'b0;
     dscratch0_en = 1'b0;
@@ -642,29 +666,31 @@ module ibex_cs_registers import ibex_pkg::*; #(
         CSR_MTVEC: mtvec_en = 1'b1;
 
         CSR_DCSR: begin
-          dcsr_d = csr_wdata_int;
-          dcsr_d.xdebugver = XDEBUGVER_STD;
+          dcsr_bits_d = csr_wdata_int;
+          dcsr_bits_d[DCSR_XDEBUGVER_MSB:DCSR_XDEBUGVER_LSB] = XDEBUGVER_STD;
           // Change to PRIV_LVL_U if software writes an unsupported value
-          if ((dcsr_d.prv != PRIV_LVL_M) && (dcsr_d.prv != PRIV_LVL_U)) begin
-            dcsr_d.prv = PRIV_LVL_U;
+          if ((dcsr_bits_d[DCSR_PRV_MSB:DCSR_PRV_LSB] != PRIV_LVL_M) &&
+              (dcsr_bits_d[DCSR_PRV_MSB:DCSR_PRV_LSB] != PRIV_LVL_U)) begin
+            dcsr_bits_d[DCSR_PRV_MSB:DCSR_PRV_LSB] = PRIV_LVL_U;
           end
 
           // Read-only for SW
-          dcsr_d.cause = dcsr_q.cause;
+          dcsr_bits_d[DCSR_CAUSE_MSB:DCSR_CAUSE_LSB] =
+              dcsr_bits_q[DCSR_CAUSE_MSB:DCSR_CAUSE_LSB];
 
           // Interrupts always disabled during single stepping
-          dcsr_d.stepie = 1'b0;
+          dcsr_bits_d[DCSR_STEP_IE_BIT] = 1'b0;
 
           // currently not supported:
-          dcsr_d.nmip = 1'b0;
-          dcsr_d.mprven = 1'b0;
-          dcsr_d.stopcount = 1'b0;
-          dcsr_d.stoptime = 1'b0;
+          dcsr_bits_d[DCSR_NMIP_BIT]      = 1'b0;
+          dcsr_bits_d[DCSR_MPRVEN_BIT]    = 1'b0;
+          dcsr_bits_d[DCSR_STOPCOUNT_BIT] = 1'b0;
+          dcsr_bits_d[DCSR_STOPTIME_BIT]  = 1'b0;
 
           // forced to be zero
-          dcsr_d.zero0 = 1'b0;
-          dcsr_d.zero1 = 1'b0;
-          dcsr_d.zero2 = 12'h0;
+          dcsr_bits_d[DCSR_ZERO0_BIT]                 = 1'b0;
+          dcsr_bits_d[DCSR_ZERO1_BIT]                 = 1'b0;
+          dcsr_bits_d[DCSR_ZERO2_MSB:DCSR_ZERO2_LSB]  = '0;
           dcsr_en      = 1'b1;
         end
 
@@ -735,8 +761,8 @@ module ibex_cs_registers import ibex_pkg::*; #(
         if (debug_csr_save_i) begin
           // all interrupts are masked
           // do not update cause, epc, tval, epc and status
-          dcsr_d.prv   = priv_lvl_q;
-          dcsr_d.cause = debug_cause_i;
+          dcsr_bits_d[DCSR_PRV_MSB:DCSR_PRV_LSB]   = priv_lvl_q;
+          dcsr_bits_d[DCSR_CAUSE_MSB:DCSR_CAUSE_LSB] = debug_cause_i;
           dcsr_en      = 1'b1;
           depc_d       = exception_pc;
           depc_en      = 1'b1;
@@ -839,6 +865,7 @@ module ibex_cs_registers import ibex_pkg::*; #(
   assign csr_we_int  = csr_wr & csr_op_en_i & ~illegal_csr_insn_o;
 
   assign csr_rdata_o = csr_rdata_int;
+  assign dcsr_d      = dcsr_bits_d;
 
   // directly output some registers
   assign csr_mepc_o  = mepc_q;
@@ -854,8 +881,14 @@ module ibex_cs_registers import ibex_pkg::*; #(
 
   // Qualify incoming interrupt requests in mip CSR with mie CSR for controller and to re-enable
   // clock upon WFI (must be purely combinational).
-  assign irqs_o        = mip & mie_q;
-  assign irq_pending_o = |irqs_o;
+  // Explicitly gate each interrupt source to avoid generating a huge packed struct expression
+  // (pcov instrumentation was producing a very large struct-inject tree here, which hurts
+  // ExportVerilog). The logic is equivalent to `irqs_o = mip & mie_q;`.
+  assign irqs_o.irq_software = mip.irq_software & mie_q.irq_software;
+  assign irqs_o.irq_timer    = mip.irq_timer    & mie_q.irq_timer;
+  assign irqs_o.irq_external = mip.irq_external & mie_q.irq_external;
+  assign irqs_o.irq_fast     = mip.irq_fast     & mie_q.irq_fast;
+  assign irq_pending_o       = |irqs_o;
 
   ////////////////////////
   // CSR instantiations //
