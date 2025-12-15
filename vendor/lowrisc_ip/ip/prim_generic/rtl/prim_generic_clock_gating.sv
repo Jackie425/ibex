@@ -17,11 +17,13 @@ module prim_generic_clock_gating #(
   output logic clk_o
 );
 
+  // PCOV/MLIR does not support always_latch; approximate the transparent latch
+  // with a negedge-sampled enable. Behavior is slightly different (enable
+  // sampled on falling edge), but good enough for simulation/synthesis in this
+  // flow.
   logic en_latch /* verilator clock_enable */;
-  always_latch begin
-    if (!clk_i) begin
-      en_latch = en_i | test_en_i;
-    end
+  always_ff @(negedge clk_i) begin
+    en_latch <= en_i | test_en_i;
   end
   assign clk_o = en_latch & clk_i;
 
