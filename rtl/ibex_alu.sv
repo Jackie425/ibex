@@ -504,46 +504,97 @@ module ibex_alu #(
     //                   :  :  :  :  :  :  :  :
     // bitcnt_partial[i] 7  6  5  4  3  2  1  0
 
-    always_comb begin
-      bitcnt_partial = '{default: '0};
+    logic [5:0] bitcnt_s1 [32];
+    logic [5:0] bitcnt_s2 [32];
+    logic [5:0] bitcnt_s3 [32];
+    logic [5:0] bitcnt_s4 [32];
+    logic [5:0] bitcnt_s5 [32];
+    logic [5:0] bitcnt_s6 [32];
+    logic [5:0] bitcnt_s7 [32];
+    logic [5:0] bitcnt_s8 [32];
+
+    genvar i;
       // stage 1
-      for (int unsigned i = 1; i < 32; i += 2) begin
-        bitcnt_partial[i] = {5'h0, bitcnt_bits[i]} + {5'h0, bitcnt_bits[i-1]};
+      for (i = 0; i < 32; i++) begin : gen_bitcnt_s1
+        if ((i % 2) == 1) begin : gen_bitcnt_s1_odd
+          assign bitcnt_s1[i] = {5'h0, bitcnt_bits[i]} + {5'h0, bitcnt_bits[i-1]};
+        end else begin : gen_bitcnt_s1_even
+          assign bitcnt_s1[i] = '0;
+        end
       end
+
       // stage 2
-      for (int unsigned i = 3; i < 32; i += 4) begin
-        bitcnt_partial[i] = bitcnt_partial[i-2] + bitcnt_partial[i];
+      for (i = 0; i < 32; i++) begin : gen_bitcnt_s2
+        if ((i % 4) == 3) begin : gen_bitcnt_s2_update
+          assign bitcnt_s2[i] = bitcnt_s1[i-2] + bitcnt_s1[i];
+        end else begin : gen_bitcnt_s2_hold
+          assign bitcnt_s2[i] = bitcnt_s1[i];
+        end
       end
+
       // stage 3
-      for (int unsigned i = 7; i < 32; i += 8) begin
-        bitcnt_partial[i] = bitcnt_partial[i-4] + bitcnt_partial[i];
+      for (i = 0; i < 32; i++) begin : gen_bitcnt_s3
+        if ((i % 8) == 7) begin : gen_bitcnt_s3_update
+          assign bitcnt_s3[i] = bitcnt_s2[i-4] + bitcnt_s2[i];
+        end else begin : gen_bitcnt_s3_hold
+          assign bitcnt_s3[i] = bitcnt_s2[i];
+        end
       end
+
       // stage 4
-      for (int unsigned i = 15; i < 32; i += 16) begin
-        bitcnt_partial[i] = bitcnt_partial[i-8] + bitcnt_partial[i];
+      for (i = 0; i < 32; i++) begin : gen_bitcnt_s4
+        if ((i % 16) == 15) begin : gen_bitcnt_s4_update
+          assign bitcnt_s4[i] = bitcnt_s3[i-8] + bitcnt_s3[i];
+        end else begin : gen_bitcnt_s4_hold
+          assign bitcnt_s4[i] = bitcnt_s3[i];
+        end
       end
-      // stage 5
-      bitcnt_partial[31] = bitcnt_partial[15] + bitcnt_partial[31];
-      // ^- primary adder tree
-      // -------------------------------
-      // ,-intermediate value adder tree
-      bitcnt_partial[23] = bitcnt_partial[15] + bitcnt_partial[23];
+
+      // stage 5 (primary + intermediate adder tree)
+      for (i = 0; i < 32; i++) begin : gen_bitcnt_s5
+        if (i == 31) begin : gen_bitcnt_s5_idx31
+          assign bitcnt_s5[i] = bitcnt_s4[15] + bitcnt_s4[31];
+        end else if (i == 23) begin : gen_bitcnt_s5_idx23
+          assign bitcnt_s5[i] = bitcnt_s4[15] + bitcnt_s4[23];
+        end else begin : gen_bitcnt_s5_hold
+          assign bitcnt_s5[i] = bitcnt_s4[i];
+        end
+      end
 
       // stage 6
-      for (int unsigned i = 11; i < 32; i += 8) begin
-        bitcnt_partial[i] = bitcnt_partial[i-4] + bitcnt_partial[i];
+      for (i = 0; i < 32; i++) begin : gen_bitcnt_s6
+        if (((i % 8) == 3) && (i >= 11)) begin : gen_bitcnt_s6_update
+          assign bitcnt_s6[i] = bitcnt_s5[i-4] + bitcnt_s5[i];
+        end else begin : gen_bitcnt_s6_hold
+          assign bitcnt_s6[i] = bitcnt_s5[i];
+        end
       end
 
       // stage 7
-      for (int unsigned i = 5; i < 32; i += 4) begin
-        bitcnt_partial[i] = bitcnt_partial[i-2] + bitcnt_partial[i];
+      for (i = 0; i < 32; i++) begin : gen_bitcnt_s7
+        if (((i % 4) == 1) && (i >= 5)) begin : gen_bitcnt_s7_update
+          assign bitcnt_s7[i] = bitcnt_s6[i-2] + bitcnt_s6[i];
+        end else begin : gen_bitcnt_s7_hold
+          assign bitcnt_s7[i] = bitcnt_s6[i];
+        end
       end
+
       // stage 8
-      bitcnt_partial[0] = {5'h0, bitcnt_bits[0]};
-      for (int unsigned i = 2; i < 32; i += 2) begin
-        bitcnt_partial[i] = bitcnt_partial[i-1] + {5'h0, bitcnt_bits[i]};
+      for (i = 0; i < 32; i++) begin : gen_bitcnt_s8
+        if (i == 0) begin : gen_bitcnt_s8_idx0
+          assign bitcnt_s8[i] = {5'h0, bitcnt_bits[0]};
+        end else if ((i % 2) == 0) begin : gen_bitcnt_s8_even
+          assign bitcnt_s8[i] = bitcnt_s7[i-1] + {5'h0, bitcnt_bits[i]};
+        end else begin : gen_bitcnt_s8_odd
+          assign bitcnt_s8[i] = bitcnt_s7[i];
+        end
       end
-    end
+
+      // final stage output
+      for (i = 0; i < 32; i++) begin : gen_bitcnt_out
+        assign bitcnt_partial[i] = bitcnt_s8[i];
+      end
+    
 
     ///////////////
     // Min / Max //

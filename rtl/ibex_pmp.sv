@@ -150,6 +150,23 @@ module ibex_pmp import ibex_pkg::*; #(
     return access_fail;
   endfunction
 
+  function automatic logic region_match_all_calc(ibex_pkg::pmp_cfg_mode_e mode,
+                                                 logic                   match_eq,
+                                                 logic                   match_gt,
+                                                 logic                   match_lt);
+    logic result = 1'b0;
+    unique case (mode)
+      PMP_MODE_OFF:   result = 1'b0;
+      PMP_MODE_NA4:   result = match_eq;
+      PMP_MODE_NAPOT: result = match_eq;
+      PMP_MODE_TOR: begin
+        result = (match_eq | match_gt) & match_lt;
+      end
+      default:        result = 1'b0;
+    endcase
+    return result;
+  endfunction
+
   // ---------------
   // Access checking
   // ---------------
@@ -198,19 +215,10 @@ module ibex_pmp import ibex_pkg::*; #(
         pmp_req_addr_i[c][PMP_ADDR_MSB:PMPGranularity+PMP_ADDR_LSB] <
         csr_pmp_addr_i[r][PMP_ADDR_MSB:PMPGranularity+PMP_ADDR_LSB];
 
-      always_comb begin
-        region_match_all[c][r] = 1'b0;
-        unique case (csr_pmp_cfg_i[r].mode)
-          PMP_MODE_OFF:   region_match_all[c][r] = 1'b0;
-          PMP_MODE_NA4:   region_match_all[c][r] = region_match_eq[c][r];
-          PMP_MODE_NAPOT: region_match_all[c][r] = region_match_eq[c][r];
-          PMP_MODE_TOR: begin
-            region_match_all[c][r] = (region_match_eq[c][r] | region_match_gt[c][r]) &
-                                     region_match_lt[c][r];
-          end
-          default:        region_match_all[c][r] = 1'b0;
-        endcase
-      end
+      assign region_match_all[c][r] = region_match_all_calc(csr_pmp_cfg_i[r].mode,
+                                                            region_match_eq[c][r],
+                                                            region_match_gt[c][r],
+                                                            region_match_lt[c][r]);
 
       // Basic permission check compares cfg register only.
       assign region_basic_perm_check[c][r] =

@@ -1179,16 +1179,13 @@ module ibex_cs_registers import ibex_pkg::*; #(
       // Select the correct WDATA (each CSR contains 4 CFG fields, each with 2 RES bits)
       assign pmp_cfg_wdata[i].lock  = csr_wdata_int[(i%4)*PMP_CFG_W+7];
       // NA4 mode is not selectable when G > 0, mode is treated as OFF
-      always_comb begin
-        unique case (csr_wdata_int[(i%4)*PMP_CFG_W+3+:2])
-          2'b00   : pmp_cfg_wdata[i].mode = PMP_MODE_OFF;
-          2'b01   : pmp_cfg_wdata[i].mode = PMP_MODE_TOR;
-          2'b10   : pmp_cfg_wdata[i].mode = (PMPGranularity == 0) ? PMP_MODE_NA4:
-                                                                    PMP_MODE_OFF;
-          2'b11   : pmp_cfg_wdata[i].mode = PMP_MODE_NAPOT;
-          default : pmp_cfg_wdata[i].mode = PMP_MODE_OFF;
-        endcase
-      end
+      assign pmp_cfg_wdata[i].mode =
+          (csr_wdata_int[(i%4)*PMP_CFG_W+3+:2] == 2'b00) ? PMP_MODE_OFF :
+          (csr_wdata_int[(i%4)*PMP_CFG_W+3+:2] == 2'b01) ? PMP_MODE_TOR :
+          (csr_wdata_int[(i%4)*PMP_CFG_W+3+:2] == 2'b10) ?
+              ((PMPGranularity == 0) ? PMP_MODE_NA4 : PMP_MODE_OFF) :
+          (csr_wdata_int[(i%4)*PMP_CFG_W+3+:2] == 2'b11) ? PMP_MODE_NAPOT :
+          PMP_MODE_OFF;
       assign pmp_cfg_wdata[i].exec  = csr_wdata_int[(i%4)*PMP_CFG_W+2];
       // When MSECCFG.MML is unset, W = 1, R = 0 is a reserved combination, so force W to 0 if R ==
       // 0. Otherwise allow all possible values to be written.
